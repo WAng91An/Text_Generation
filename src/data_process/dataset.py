@@ -103,7 +103,6 @@ class SampleDataset(Dataset):
     def __len__(self):
         return self._len
 
-
 def collate_fn(batch):
     """Split data set into batches and do padding for each batch.
     Args:
@@ -114,7 +113,6 @@ def collate_fn(batch):
         OOV (dict): Out-of-vocabulary tokens.
         len_OOV (int): Number of OOV tokens.
     """
-    print(batch)
     def padding(indice, max_length, pad_idx=0):
         pad_indice = [item + [pad_idx] * max(0, max_length - len(item)) for item in indice]
         return torch.tensor(pad_indice)

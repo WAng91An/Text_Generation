@@ -41,11 +41,12 @@ class Encoder(nn.Module):
                 The hidden states of lstm (h_n, c_n).
                 Each with shape (2, batch_size, hidden_units)
         """
+        # x: (128, 233)
         embedded = self.embedding(x)
+        # embedded: (128, 233, 300)
         output, hidden = self.lstm(embedded)
 
         return output, hidden
-
 
 class Attention(nn.Module):
     def __init__(self, hidden_units):
@@ -58,41 +59,32 @@ class Attention(nn.Module):
         self.v = nn.Linear(2*hidden_units, 1, bias=False)
 
 #     @timer('attention')
-    def forward(self,
-                decoder_states,
-                encoder_output,
-                x_padding_masks,
-                coverage_vector):
+    def forward(self, decoder_states, encoder_output, x_padding_masks, coverage_vector):
         """Define forward propagation for the attention network.
-
         Args:
-            decoder_states (tuple):
-                The hidden states from lstm (h_n, c_n) in the decoder,
-                each with shape (1, batch_size, hidden_units)
-            encoder_output (Tensor):
-                The output from the lstm in the decoder with
-                shape (batch_size, seq_len, hidden_units).
-            x_padding_masks (Tensor):
-                The padding masks for the input sequences
-                with shape (batch_size, seq_len).
-            coverage_vector (Tensor):
-                The coverage vector from last time step.
-                with shape (batch_size, seq_len).
-
+            decoder_states (tuple): The hidden states from lstm (h_n, c_n) in the decoder, each with shape (1, batch_size, hidden_units)
+            encoder_output (Tensor): The output from the lstm in the decoder with shape (batch_size, seq_len, hidden_units).
+            x_padding_masks (Tensor): The padding masks for the input sequences with shape (batch_size, seq_len).
+            coverage_vector (Tensor): The coverage vector from last time step. with shape (batch_size, seq_len).
         Returns:
-            context_vector (Tensor):
-                Dot products of attention weights and encoder hidden states.
-                The shape is (batch_size, 2*hidden_units).
+            context_vector (Tensor): Dot products of attention weights and encoder hidden states. The shape is (batch_size, 2*hidden_units).
             attention_weights (Tensor): The shape is (batch_size, seq_length).
             coverage_vector (Tensor): The shape is (batch_size, seq_length).
         """
         # Concatenate h and c to get s_t and expand the dim of s_t.
         h_dec, c_dec = decoder_states
-        # (1, batch_size, 2*hidden_units)
+
+        # (1, batch_size, 2 * hidden_units)
         s_t = torch.cat([h_dec, c_dec], dim=2)
+
         # (batch_size, 1, 2*hidden_units)
         s_t = s_t.transpose(0, 1)
-        # (batch_size, seq_length, 2*hidden_units)
+
+        # expand_as 这个函数就是把一个 tensor 变成和函数括号内一样形状的 tensor
+        # (batch_size, 1, 2*hidden_units)  -> (batch_size, seq_length, 2*hidden_units)
+        # contiguous：view只能用在contiguous的variable上。如果在view之前用了transpose, permute等，需要用contiguous()来返回一个contiguous copy。
+        # 一种可能的解释是： 有些tensor并不是占用一整块内存，而是由不同的数据块组成，而tensor的view()操作依赖于内存是整块的，这时只需要执行contiguous()这个函数，把tensor变成在内存中连续分布的形式。
+        # 判断是否contiguous用torch.Tensor.is_contiguous()函数。
         s_t = s_t.expand_as(encoder_output).contiguous()
 
         # calculate attention scores
@@ -128,7 +120,6 @@ class Attention(nn.Module):
             coverage_vector = coverage_vector + attention_weights
 
         return context_vector, attention_weights, coverage_vector
-
 
 class Decoder(nn.Module):
     def __init__(self,
@@ -212,7 +203,6 @@ class Decoder(nn.Module):
 
         return p_vocab, decoder_states, p_gen
 
-
 class ReduceState(nn.Module):
     """
     Since the encoder has a bidirectional LSTM layer while the decoder has a
@@ -236,11 +226,13 @@ class ReduceState(nn.Module):
                 Reduced hidden states,
                 each with shape (1, batch_size, hidden_units).
         """
+        # h_n, h_c：
+        # h_n 保存了每一层，最后一个 time step 的输出 h，如果是双向 LSTM，单独保存前向和后向的最后一个 time step 的输出 h, [2, batch_size, hidden_size]
+        # h_c 保存了每一层，最后一个 time step 的输出 c，如果是双向 LSTM，单独保存前向和后向的最后一个 time step 的输出 c, [2, batch_size, hidden_size]
         h, c = hidden
-        h_reduced = torch.sum(h, dim=0, keepdim=True)
-        c_reduced = torch.sum(c, dim=0, keepdim=True)
+        h_reduced = torch.sum(h, dim=0, keepdim=True) # [1, batch_size, hidden_size]
+        c_reduced = torch.sum(c, dim=0, keepdim=True) # [1, batch_size, hidden_size]
         return (h_reduced, c_reduced)
-
 
 class PGN(nn.Module):
     def __init__(self, v):
@@ -272,9 +264,8 @@ class PGN(nn.Module):
             self.attention = torch.load('../../model/pgn/attention.pt')
             self.reduce_state = torch.load('../../model/pgn/reduce_state.pt')
 
-#     @timer('final dist')
-    def get_final_distribution(self, x, p_gen, p_vocab, attention_weights,
-                               max_oov):
+    # @timer('final dist')
+    def get_final_distribution(self, x, p_gen, p_vocab, attention_weights, max_oov):
         """Calculate the final distribution for the model.
 
         Args:
@@ -311,34 +302,30 @@ class PGN(nn.Module):
         # Add the attention weights to the corresponding vocab positions.
         # Refer to equation (9).
         final_distribution = \
-            p_vocab_extended.scatter_add_(dim=1,
-                                          index=x,
-                                          src=attention_weighted)
+            p_vocab_extended.scatter_add_(dim=1, index=x, src=attention_weighted)
 
         return final_distribution
 
-#     @timer('model forward')
+    # @timer('model forward')
     def forward(self, x, x_len, y, len_oovs, batch, num_batches):
         """Define the forward propagation for the seq2seq model.
-
         Args:
-            x (Tensor):
-                Input sequences as source with shape (batch_size, seq_len)
+            x (Tensor): Input sequences as source with shape (batch_size, seq_len)
             x_len ([int): Sequence length of the current batch.
-            y (Tensor):
-                Input sequences as reference with shape (bacth_size, y_len)
-            len_oovs (Tensor):
-                The numbers of out-of-vocabulary words for samples in this batch.
+            y (Tensor): Input sequences as reference with shape (bacth_size, y_len)
+            len_oovs (Tensor): The numbers of out-of-vocabulary words for samples in this batch.
             batch (int): The number of the current batch.
             num_batches(int): Number of batches in the epoch.
-
         Returns:
             batch_loss (Tensor): The average loss of the current batch.
         """
-
+        # 将 x 中 oov 词的 id 替换成 UNK 的 id
         x_copy = replace_oovs(x, self.v)
+        # 将 x 中大于的数设置成 1
         x_padding_masks = torch.ne(x, 0).byte().float()
         encoder_output, encoder_states = self.encoder(x_copy)
+        # encoder_output: output 保存了最后一层，每个 time step 的输出 h，如果是双向 LSTM，每个 time step 的输出 h = [h正向, h逆向] (同一个 time step 的正向和逆向的 h 连接起来)。
+        # encoder_states （h_n, h_c）: h_n 保存了每一层，最后一个 time step 的输出 h，如果是双向 LSTM，单独保存前向和后向的最后一个 time step 的输出 h。
         # Reduce encoder hidden states.
         decoder_states = self.reduce_state(encoder_states)
         # Initialize coverage vector.

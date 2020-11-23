@@ -250,14 +250,20 @@ def add2heap(heap, item, k):
 
 def replace_oovs(in_tensor, vocab):
     """Replace oov tokens in a tensor with the <UNK> token.
-
     Args:
         in_tensor (Tensor): The tensor before replacement.
         vocab (vocab.Vocab): The vocabulary.
-
     Returns:
         Tensor: The tensor after replacement.
-    """    
+    """
+
+    """
+    >>> torch.full((2, 3), 3.141592)
+        tensor([[ 3.1416,  3.1416,  3.1416],
+                [ 3.1416,  3.1416,  3.1416]])
+    """
     oov_token = torch.full(in_tensor.shape, vocab.UNK).long().to(config.DEVICE)
+    # torch.where: 当 in_tensor 中的值大于 (len(vocab) - 1) 时返回 oov_token 中对应位置的数，小于时返回 in_tensor 中对应的值。
+    # 这样将 in_tensor 中大于 （len(vocab) - 1） 的 id 全变成了 3, 3 是 vocab.UNK
     out_tensor = torch.where(in_tensor > len(vocab) - 1, oov_token, in_tensor)
     return out_tensor

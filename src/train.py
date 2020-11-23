@@ -41,10 +41,7 @@ def train(dataset, val_dataset, vocab, start_epoch=0):
 
     # Define the optimizer.
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate, )
-    train_dataloader = DataLoader(dataset=train_data,
-                                  batch_size=config.batch_size,
-                                  shuffle=True,
-                                  collate_fn=collate_fn)
+    train_dataloader = DataLoader(dataset=train_data, batch_size=config.batch_size, shuffle=True, collate_fn=collate_fn)
 
     val_losses = np.inf
 
@@ -63,7 +60,24 @@ def train(dataset, val_dataset, vocab, start_epoch=0):
             with tqdm(total=num_batches//100) as batch_progress:
                 for batch, data in enumerate(tqdm(train_dataloader)):
                     x, y, x_len, y_len, oov, len_oovs = data
-                    print(data)
+
+                    """
+                    # 128: batch_size
+                    # print(x.shape) # torch.Size([128, 302])
+                    # print(y.shape) # torch.Size([128, 55])
+                    # print(x_len.shape) # torch.Size([128])
+                    # print(y_len.shape) # torch.Size([128])
+                    # print(len(oov)) # 128
+                    # print(len_oovs.shape) # torch.Size([128])
+
+                    # print(x[0]) # tensor([1, 5264, 3788 ... , 2])
+                    # print(y[0]) # tensor([1, 1542, 41, ... , 2, 0, 0])
+                    # print(x_len[0]) # tensor(302)
+                    # print(y_len[0]) # tensor(53)
+                    # print(oov[0]) # ['美背文', '变色功能', '70C']
+                    # print(len_oovs[0]) # tensor(3)
+                    """
+
                     assert not np.any(np.isnan(x.numpy()))
                     if config.is_cuda:  # Training with GPUs.
                         x = x.to(config.DEVICE)
