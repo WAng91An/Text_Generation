@@ -82,17 +82,20 @@ class Attention(nn.Module):
 
         # expand_as 这个函数就是把一个 tensor 变成和函数括号内一样形状的 tensor
         # (batch_size, 1, 2*hidden_units)  -> (batch_size, seq_length, 2*hidden_units)
-        # contiguous：view只能用在contiguous的variable上。如果在view之前用了transpose, permute等，需要用contiguous()来返回一个contiguous copy。
-        # 一种可能的解释是： 有些tensor并不是占用一整块内存，而是由不同的数据块组成，而tensor的view()操作依赖于内存是整块的，这时只需要执行contiguous()这个函数，把tensor变成在内存中连续分布的形式。
-        # 判断是否contiguous用torch.Tensor.is_contiguous()函数。
+        # contiguous：view 只能用在 contiguous 的 variable 上。如果在 view 之前用了 transpose, permute 等，需要用 contiguous() 来返回一个 contiguous copy。
+        # 一种可能的解释是： 有些 tensor 并不是占用一整块内存，而是由不同的数据块组成，而 tensor 的 view() 操作依赖于内存是整块的，这时只需要执行 contiguous() 这个函数，把 tensor 变成在内存中连续分布的形式。
+        # 判断是否 contiguous 用 torch.Tensor.is_contiguous() 函数。
         s_t = s_t.expand_as(encoder_output).contiguous()
 
         # calculate attention scores
         # Equation(11).
+        # encoder_output：(batch_size, seq_len, 2 * hidden_units)
         # Wh h_* (batch_size, seq_length, 2*hidden_units)
         encoder_features = self.Wh(encoder_output.contiguous())
+
         # Ws s_t (batch_size, seq_length, 2*hidden_units)
         decoder_features = self.Ws(s_t)
+
         # (batch_size, seq_length, 2*hidden_units)
         att_inputs = encoder_features + decoder_features
 
@@ -103,15 +106,17 @@ class Attention(nn.Module):
 
         # (batch_size, seq_length, 1)
         score = self.v(torch.tanh(att_inputs))
+
         # (batch_size, seq_length)
         attention_weights = F.softmax(score, dim=1).squeeze(2)
         attention_weights = attention_weights * x_padding_masks
         # Normalize attention weights after excluding padded positions.
         normalization_factor = attention_weights.sum(1, keepdim=True)
         attention_weights = attention_weights / normalization_factor
+
         # (batch_size, 1, 2*hidden_units)
-        context_vector = torch.bmm(attention_weights.unsqueeze(1),
-                                   encoder_output)
+        context_vector = torch.bmm(attention_weights.unsqueeze(1), encoder_output)
+
         # (batch_size, 2*hidden_units)
         context_vector = context_vector.squeeze(1)
 
@@ -144,25 +149,13 @@ class Decoder(nn.Module):
 #     @timer('decoder')
     def forward(self, x_t, decoder_states, context_vector):
         """Define forward propagation for the decoder.
-
-        Args:
-            x_t (Tensor):
-                The input of the decoder x_t of shape (batch_size, 1).
-            decoder_states (tuple):
-                The hidden states(h_n, c_n) of the decoder from last time step.
-                The shapes are (1, batch_size, hidden_units) for each.
-            context_vector (Tensor):
-                The context vector from the attention network
-                of shape (batch_size,2*hidden_units).
-
+        Args: x_t (Tensor): The input of the decoder x_t of shape (batch_size, 1).
+            decoder_states (tuple): The hidden states(h_n, c_n) of the decoder from last time step. The shapes are (1, batch_size, hidden_units) for each.
+            context_vector (Tensor): The context vector from the attention network of shape (batch_size,2*hidden_units).
         Returns:
-            p_vocab (Tensor):
-                The vocabulary distribution of shape (batch_size, vocab_size).
-            docoder_states (tuple):
-                The lstm states in the decoder.
-                The shapes are (1, batch_size, hidden_units) for each.
-            p_gen (Tensor):
-                The generation probabilities of shape (batch_size, 1).
+            p_vocab (Tensor): The vocabulary distribution of shape (batch_size, vocab_size).
+            docoder_states (tuple): The lstm states in the decoder. The shapes are (1, batch_size, hidden_units) for each.
+            p_gen (Tensor): The generation probabilities of shape (batch_size, 1).
         """
         decoder_emb = self.embedding(x_t)
 
@@ -171,10 +164,7 @@ class Decoder(nn.Module):
         # concatenate context vector and decoder state
         # (batch_size, 3*hidden_units)
         decoder_output = decoder_output.view(-1, config.hidden_size)
-        concat_vector = torch.cat(
-            [decoder_output,
-             context_vector],
-            dim=-1)
+        concat_vector = torch.cat([decoder_output, context_vector], dim=-1)
 
         # calculate vocabulary distribution
         # (batch_size, hidden_units)
@@ -197,8 +187,7 @@ class Decoder(nn.Module):
                 context_vector,
                 s_t.squeeze(0),
                 decoder_emb.squeeze(1)
-            ],
-                              dim=-1)
+            ], dim=-1)
             p_gen = torch.sigmoid(self.w_gen(x_gen))
 
         return p_vocab, decoder_states, p_gen
